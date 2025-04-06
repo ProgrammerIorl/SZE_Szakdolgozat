@@ -9,39 +9,31 @@ public class MapGenerator : MonoBehaviour
     public Dictionary<int, Room> rooms = new Dictionary<int, Room>();
     public GameObject prefab;
     public int count = 3;
+    int distance = 10;
     int index = 0;
 
     void Start()
     {
         StartCoroutine(RoomGeneration());
-        
     }
 
     IEnumerator RoomGeneration()
     {
-        
 
-        while (index <= count)
+
+        while (index < count)
         {
             Vector3 position = NewPosition();
             GameObject roomObject = Instantiate(prefab, position, Quaternion.identity);
             Room room = roomObject.GetComponent<Room>();
-            SaveRoomCoords(room,position);
-
-            // Várjunk egy kicsit az új szobák között
+            SaveRoomCoords(room, position);
+            yield return new WaitForSeconds(0.5f);
+            StartCoroutine(RoomGeneration());
             yield return new WaitForSeconds(0.5f);
 
-            // Generáljunk további szobákat véletlenszerû ajtók száma alapján
-            
-            
-                
-                StartCoroutine(RoomGeneration());
-
-                yield return new WaitForSeconds(0.5f);
-            
         }
     }
-    
+
 
     Vector3 NewPosition()
     {
@@ -58,17 +50,15 @@ public class MapGenerator : MonoBehaviour
                 switch (Random.Range(1, 4))
                 {
                     case 1:
-                        newPosition.x += 1; // Távolság nagyobb legyen, hogy ne fedjék egymást
+                        newPosition.x += distance;
                         break;
                     case 2:
-                        newPosition.x -= 1;
+                        newPosition.x -= distance;
                         break;
                     case 3:
-                        newPosition.z += 1;
+                        newPosition.z += distance;
                         break;
-                    case 4:
-                        newPosition.z -= 1;
-                        break;
+                    
                 }
                 for (int i = 0; i < rooms.Count; i++)
                 {
@@ -85,17 +75,14 @@ public class MapGenerator : MonoBehaviour
 
     Room GetLastRoom()
     {
-       
-        Debug.Log(rooms.Last().Value.GetXCoord()+" "+ rooms.Last().Value.GetZCoord());
         return rooms.Last().Value;
     }
-    void SaveRoomCoords(Room room, Vector3 position) 
+    void SaveRoomCoords(Room room, Vector3 position)
     {
-        room.xcoord=position.x;
-        room.zcoord = position.z;
+        room.SetXCoord(position.x);
+        room.SetZCoord(position.z);
         rooms.Add(index, room);
         index++;
-
     }
-    
+
 }
