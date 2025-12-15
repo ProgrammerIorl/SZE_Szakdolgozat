@@ -1,88 +1,263 @@
-using System.Collections;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using UnityEngine.UIElements;
+using UnityEngine.Tilemaps;
 
 public class MapGenerator : MonoBehaviour
 {
-    public Dictionary<int, Room> rooms = new Dictionary<int, Room>();
-    public GameObject prefab;
-    public int count = 3;
-    int distance = 10;
+    public static MapGenerator Instance { get; private set; }
+    public List<Room> rooms = new();
+    public GameObject roomPrefab;
+    public int count = 10;
+    public float distance = 11f;
     int index = 0;
+    public GameObject playerPrefab;
+    public GameObject enemyPrefab;
+    public GameObject companionPrefab;
 
+    public List<TileScriptableObject> types = new();
+    public List<WeaponScriptableObject> weaponPool = new();
+    public List<ArmorScriptableObject> armorPool = new();
+    List<Room> availableRoomList = new();
+    
+    private void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        Instance = this;
+    }
     void Start()
     {
-        StartCoroutine(RoomGeneration());
+        weaponPool.AddRange(Resources.LoadAll<WeaponScriptableObject>("Objects/WeaponTypes"));
+        armorPool.AddRange(Resources.LoadAll<ArmorScriptableObject>("Objects/ArmorTypes"));
+        types.AddRange(Resources.LoadAll<TileScriptableObject>("Objects/TileTypes"));
+        RoomGeneration();
+        SpawnUnits();
     }
 
-    IEnumerator RoomGeneration()
+
+    void SpawnUnits()
     {
+        // --- PLAYER SPAWN ---
+        Room startRoom = rooms[0];
 
+        Tile playerTile = GetRandomWalkableTile(startRoom);
+        GameObject playerObj = Instantiate(playerPrefab, playerTile.transform.position, Quaternion.identity);
+        Player player = playerObj.GetComponent<Player>();
 
-        while (index < count)
+        player.currentTile = playerTile;
+        player.currentRoom = startRoom;
+
+        // --- COMPANION SPAWN (playerhez ugyanabba a szobába) ---
+        if (companionPrefab != null)
         {
-            Vector3 position = NewPosition();
-            GameObject roomObject = Instantiate(prefab, position, Quaternion.identity);
-            Room room = roomObject.GetComponent<Room>();
-            SaveRoomCoords(room, position);
-            yield return new WaitForSeconds(0.5f);
-            StartCoroutine(RoomGeneration());
-            yield return new WaitForSeconds(0.5f);
+            Tile companionTile = GetRandomWalkableTile(startRoom);
+
+            GameObject companionObj = Instantiate(companionPrefab, companionTile.transform.position, Quaternion.identity);
+            Companion companion = companionObj.GetComponent<Companion>();
+
+            companion.currentTile = companionTile;
+            companion.currentRoom = startRoom;
+
+            // Ha szeretnél felszerelést neki is:
+           
+        }
+
+        // --- ENEMY SPAWN EACH ROOM ---
+        for (int i = 1; i < rooms.Count; i++)
+        {
+            Room room = rooms[i];
+            Tile enemyTile = GetRandomWalkableTile(room);
+
+            GameObject enemyObj = Instantiate(enemyPrefab, enemyTile.transform.position, Quaternion.identity);
+            Enemy enemy = enemyObj.GetComponent<Enemy>();
+
+            enemy.currentTile = enemyTile;
+            enemy.currentRoom = room;
+
+            enemy.AssignRandomEquipment(armorPool, weaponPool);
 
         }
     }
 
-
-    Vector3 NewPosition()
+    Tile GetRandomWalkableTile(Room room)
     {
-        Vector3 newPosition = Vector3.zero;
+        List<Tile> walkableTiles = new List<Tile>();
 
-        if (rooms.Count > 0)
+        foreach (var tile in room.tileMap.Values)
         {
-            Room room = GetLastRoom();
-            newPosition = new Vector3(room.GetXCoord(), 0, room.GetZCoord());
-            bool isNotValid;
-            do
+            // Check walkable by tag or type
+            if (tile.tag == "Wall" || tile.tag == "Debris")
+                continue;
+
+            // Optionally: check layer
+            if (tile.gameObject.layer == LayerMask.NameToLayer("Unwalkable"))
+                continue;
+
+            walkableTiles.Add(tile);
+        }
+
+        if (walkableTiles.Count == 0)
+        {
+            Debug.LogError("Nincsen walkable tile ebben a room-ban!");
+            return null;
+        }
+
+        return walkableTiles[UnityEngine.Random.Range(0, walkableTiles.Count)];
+    }
+
+
+    public void RoomGeneration()
+    {
+        Vector2 startPos = Vector2.zero;
+        for (int i = 0; i < count; i++)
+        {
+            Room baseRoom;
+            if (i == 0)
             {
-                isNotValid = false;
-                switch (Random.Range(1, 4))
+                GameObject firstRoomObj = Instantiate(roomPrefab, Vector2.zero, Quaternion.identity);
+                Room firstRoom = firstRoomObj.GetComponent<Room>();
+                SaveRoom(firstRoom, Vector2.zero);
+                availableRoomList.Add(firstRoom);
+                firstRoom.GenerateRoomTiles();
+                baseRoom = firstRoom;
+                firstRoomObj.name = "Room " + i;
+            }
+            else
+            {
+                do
                 {
-                    case 1:
-                        newPosition.x += distance;
-                        break;
-                    case 2:
-                        newPosition.x -= distance;
-                        break;
-                    case 3:
-                        newPosition.z += distance;
-                        break;
-                    
-                }
-                for (int i = 0; i < rooms.Count; i++)
+                    baseRoom = availableRoomList[UnityEngine.Random.Range(0, availableRoomList.Count)];
+                }while (baseRoom.availableDirections.Count < 1);
+
+                
+                Direction dir = baseRoom.availableDirections[UnityEngine.Random.Range(0, baseRoom.availableDirections.Count)];
+                Vector2 newPos = new Vector2(baseRoom.GetXCoord(), baseRoom.GetYCoord()) + Room.DirectionToOffset(dir, distance);
+
+                if (!RoomExistsAt(newPos))
                 {
-                    if (rooms[i].GetXCoord() == newPosition.x && rooms[i].GetZCoord() == newPosition.z)
-                    {
-                        isNotValid = true;
-                        break;
-                    }
+                    GameObject newRoomObj = Instantiate(roomPrefab, newPos, Quaternion.identity);
+                    Room newRoom = newRoomObj.GetComponent<Room>();
+                    SaveRoom(newRoom, newPos);
+                    availableRoomList.Add(newRoom);
+                    RemoveDirection(baseRoom, dir);
+                    RemoveDirection(newRoom, Opposite(dir));
+                    newRoom.GenerateRoomTiles();
+                    newRoom.name = "Room " + i;
+                    ConnectNeighbors();
                 }
-            } while (isNotValid);
+                else
+                {
+                    i--;
+                }
+            }
         }
-        return newPosition;
+        foreach (var room in rooms)
+        {
+            room.GenerateDoorsAndPaths();            
+        }
+        
+        SamePlace();
+    }
+    private void ConnectNeighbors()
+    {
+        foreach (Room room in rooms)
+        {
+            Vector2Int pos = new Vector2Int(room.GetXCoord(), room.GetYCoord());
+
+            // NORTH
+            foreach (Room r in rooms)
+            {
+                if (r.GetXCoord() == pos.x && r.GetYCoord() == pos.y + distance)
+                {
+                    room.SetNeighbor(Direction.North, r);
+                }
+            }
+
+            // SOUTH
+            foreach (Room r in rooms)
+            {
+                if (r.GetXCoord() == pos.x && r.GetYCoord() == pos.y - distance)
+                {
+                    room.SetNeighbor(Direction.South, r);
+                }
+            }
+
+            // EAST
+            foreach (Room r in rooms)
+            {
+                if (r.GetXCoord() == pos.x + distance && r.GetYCoord() == pos.y)
+                {
+                    room.SetNeighbor(Direction.East, r);
+                }
+            }
+
+            // WEST
+            foreach (Room r in rooms)
+            {
+                if (r.GetXCoord() == pos.x - distance && r.GetYCoord() == pos.y)
+                {
+                    room.SetNeighbor(Direction.West, r);
+                }
+            }
+        }
     }
 
-    Room GetLastRoom()
+    public static Direction Opposite(Direction dir)
     {
-        return rooms.Last().Value;
+        switch (dir)
+        {
+            case Direction.North: return Direction.South;
+            case Direction.South: return Direction.North;
+            case Direction.East: return Direction.West;
+            case Direction.West: return Direction.East;
+            default: return dir;
+        }
     }
-    void SaveRoomCoords(Room room, Vector3 position)
+    public static void RemoveDirection(Room room, Direction dir)
     {
-        room.SetXCoord(position.x);
-        room.SetZCoord(position.z);
-        rooms.Add(index, room);
+        room.availableDirections.Remove(dir);
+        if (room.availableDirections.Count == 0)
+        {
+            Instance.availableRoomList.Remove(room);
+        }
+    }
+    
+    bool RoomExistsAt(Vector2 pos)
+    {
+        foreach (Room r in rooms)
+        {
+            if (r.GetXCoord() == pos.x && r.GetYCoord() == pos.y)
+                return true;
+        }
+        return false;
+    }
+
+    void SaveRoom(Room room, Vector3 pos)
+    {
+        room.SetXCoord((int)pos.x);
+        room.SetYCoord((int)pos.y);
+        rooms.Add(room);
         index++;
     }
 
+    public void SamePlace()
+    {
+        bool ok = false;
+        for (int i = 0; i < rooms.Count; i++)
+        {
+            for (int j = i + 1; j < rooms.Count; j++)
+            {
+                if (rooms[i].GetXCoord() == rooms[j].GetXCoord() &&
+                    rooms[i].GetYCoord() == rooms[j].GetYCoord())
+                {
+                    ok = true;
+                }
+            }
+        }      
+    }
 }

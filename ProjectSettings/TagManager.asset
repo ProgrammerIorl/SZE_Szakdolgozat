@@ -3,7 +3,18 @@
 --- !u!78 &1
 TagManager:
   serializedVersion: 2
-  tags: []
+  tags:
+  - Wall
+  - Enemy
+  - Helmet
+  - ChestPlate
+  - Armguards
+  - Leggings
+  - Weapon
+  - Plant
+  - Plain
+  - Water
+  - Debris
   layers:
   - Default
   - TransparentFX
@@ -12,9 +23,9 @@ TagManager:
   - Water
   - UI
   - Ground
-  - 
-  - 
-  - 
+  - Unwalkable
+  - Player
+  - Enemy
   - 
   - 
   - 

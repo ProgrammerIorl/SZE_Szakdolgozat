@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ac4e6f5825372ed40ae5b0a47af0f1b0, type: 3}
+  m_Name: LeatherChestPlate
+  m_EditorClassIdentifier: 
+  equipment_name: Leather Chestplate
+  description: It is made from leather. It protects
+  sprite: {fileID: 21300000, guid: afb8e4045ed35634b9124f39959c739f, type: 3}
+  level: 1
+  defense: 5
+  magic_defense: 5
+  health: 10
